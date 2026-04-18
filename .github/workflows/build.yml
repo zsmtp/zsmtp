@@ -1,45 +1,71 @@
-name: Build
+---
+name: Test & Build
 
 on:
+  push:
+    branches:
+      - '*'
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   test:
     uses: ./.github/workflows/test.yml
 
-  binaries:
-    name: Build (${{ matrix.os }})
+  coverage:
+    uses: ./.github/workflows/coverage.yml
+    secrets: inherit
+
+  build:
+    name: Build
     runs-on: ${{ matrix.os }}
-    needs: test
+    needs:
+      - test
+      - containers
+
     strategy:
-      fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
-            artifact_name: zsmtp-linux
-            binary_path: target/release/zsmtp
-          - os: macos-latest
-            artifact_name: zsmtp-macos
-            binary_path: target/release/zsmtp
+          - build: linux
+            os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+
+          - build: macos
+            os: macos-latest
+            target: x86_64-apple-darwin
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
+
+      - name: Get package name from Cargo.toml
+        id: package
+        shell: bash
+        run: |
+          PACKAGE_NAME=$(awk -F '"' '/^name = / {print $2; exit}' Cargo.toml)
+          echo "name=$PACKAGE_NAME" >> $GITHUB_OUTPUT
+          echo "Package name: $PACKAGE_NAME"
+
+      - name: Branch name
+        run: echo "${GITHUB_REF##*/}"
+
+      - name: Get the release version from the tag
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
 
-      - name: Cache Cargo
-        uses: Swatinem/rust-cache@v2
+      - run: sudo apt -y install musl-dev musl-tools
+        if: matrix.build == 'linux'
+
+      - name: Build (Linux musl)
+        if: matrix.build == 'linux'
+        run: cargo build --release --locked --target ${{ matrix.target }}
 
       - name: Build
-        run: cargo build --release --locked
-
-      - name: Upload Binary
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.artifact_name }}
-          path: ${{ matrix.binary_path }}
+        if: matrix.build != 'linux'
+        run: cargo build --release --locked --target ${{ matrix.target }}

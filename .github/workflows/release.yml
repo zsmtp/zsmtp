@@ -1,139 +1,143 @@
+---
 name: Release
 
 on:
   push:
     tags:
-      - "v*"
+      - '*'
   workflow_dispatch:
 
 permissions:
   contents: write
 
-env:
-  CARGO_TERM_COLOR: always
-
 jobs:
   test:
     uses: ./.github/workflows/test.yml
 
+  containers:
+    uses: ./.github/workflows/containers.yml
+
   build:
-    name: Build Release Assets (${{ matrix.os }})
+    name: Build and release
     runs-on: ${{ matrix.os }}
-    needs: test
+    needs:
+      - test
+      - containers
+
     strategy:
-      fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
-            archive_name: zsmtp-linux-x86_64
-            binary_name: zsmtp
-            package_linux: true
-          - os: macos-latest
-            archive_name: zsmtp-macos
-            binary_name: zsmtp
-            package_linux: false
+          - build: linux
+            os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+
+          - build: macos
+            os: macos-latest
+            target: x86_64-apple-darwin
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
+
+      - name: Get package name from Cargo.toml
+        id: package
+        shell: bash
+        run: |
+          PACKAGE_NAME=$(awk -F '"' '/^name = / {print $2; exit}' Cargo.toml)
+          echo "name=$PACKAGE_NAME" >> $GITHUB_OUTPUT
+          echo "Package name: $PACKAGE_NAME"
+
+      - name: Get the release version from the tag
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache Cargo
-        uses: Swatinem/rust-cache@v2
-
-      - name: Resolve Version
-        id: version
-        shell: bash
-        run: |
-          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
-            echo "value=${GITHUB_REF_NAME}" >> "${GITHUB_OUTPUT}"
-          else
-            VERSION="$(awk -F '"' '/^version = / {print $2; exit}' Cargo.toml)"
-            echo "value=v${VERSION}" >> "${GITHUB_OUTPUT}"
-          fi
-
-      - name: Build
-        run: cargo build --release --locked
-
-      - name: Install Linux Packaging Tools
-        if: matrix.package_linux
-        uses: taiki-e/install-action@v2
         with:
-          tool: cargo-deb,cargo-generate-rpm
+          targets: ${{ matrix.target }}
 
-      - name: Build Linux Packages
-        if: matrix.package_linux
-        shell: bash
+      # Linux-only prerequisites
+      - name: Install system deps (musl)
+        if: matrix.build == 'linux'
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y musl-dev musl-tools
+
+      - name: Install packaging tools (RPM/DEB)
+        if: matrix.build == 'linux'
+        run: |
+          cargo install cargo-generate-rpm
+          cargo install cargo-deb --force --locked
+
+      # Build once for Linux (musl)
+      - name: Build Linux (musl)
+        if: matrix.build == 'linux'
+        run: cargo build --release --locked --target ${{ matrix.target }}
+
+      # Strip once and prep paths for both packagers
+      - name: Strip and prepare packaging paths (Linux)
+        if: matrix.build == 'linux'
+        run: |
+          BIN="target/${{ matrix.target }}/release/${{ steps.package.outputs.name }}"
+          ls -al "$BIN"
+          strip -s "$BIN" || true
+          # Ensure cargo-generate-rpm's asset path exists without copying the file
+          mkdir -p target/release
+          ln -sf "../${{ matrix.target }}/release/${{ steps.package.outputs.name }}" "target/release/${{ steps.package.outputs.name }}"
+          ls -al target/release/${{ steps.package.outputs.name }}
+
+      - name: Generate RPM
+        if: matrix.build == 'linux'
         run: |
           cargo generate-rpm
-          cargo deb --no-build
+          RPM_PATH="$(find target/generate-rpm -type f -name '*.rpm' -print -quit)"
+          echo "RPM_ASSET=$RPM_PATH" >> $GITHUB_ENV
+          echo "RPM: $RPM_PATH"
 
-      - name: Archive Binary
+      - name: Generate DEB (musl static)
+        if: matrix.build == 'linux'
+        run: |
+          cargo deb --no-build
+          DEB_PATH="$(find target/debian -maxdepth 1 -type f -name '*.deb' -print -quit)"
+          echo "DEB_ASSET=$DEB_PATH" >> $GITHUB_ENV
+          echo "DEB: $DEB_PATH"
+
+      - name: Build archive
         shell: bash
         run: |
-          version="${{ steps.version.outputs.value }}"
-          archive_dir="${{ matrix.archive_name }}-${version}"
-          mkdir -p "${archive_dir}"
-          cp "target/release/${{ matrix.binary_name }}" "${archive_dir}/zsmtp"
-          tar -czf "${archive_dir}.tar.gz" "${archive_dir}"
+          binary_name="${{ steps.package.outputs.name }}"
+          dirname="$binary_name-${{ env.VERSION }}-${{ matrix.target }}"
+          mkdir "$dirname"
+          mv "target/${{ matrix.target }}/release/$binary_name" "$dirname"
+          tar -czf "$dirname.tar.gz" "$dirname"
+          echo "ASSET=$dirname.tar.gz" >> $GITHUB_ENV
 
-      - name: Upload Release Archives
-        uses: actions/upload-artifact@v4
+      # Skip release if the tag starts with 't'
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/') && !startsWith(github.ref_name, 't')
+        uses: softprops/action-gh-release@v3
         with:
-          name: ${{ matrix.archive_name }}-artifacts
-          path: |
-            *.tar.gz
-
-      - name: Upload Linux Packages
-        if: matrix.package_linux
-        uses: actions/upload-artifact@v4
-        with:
-          name: zsmtp-linux-packages
-          path: |
-            target/generate-rpm/*.rpm
-            target/debian/*.deb
-
-  github-release:
-    name: GitHub Release
-    runs-on: ubuntu-latest
-    needs: build
-    if: github.ref_type == 'tag'
-
-    steps:
-      - name: Download Artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: dist
-
-      - name: Publish Release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            dist/**/*.tar.gz
-            dist/**/*.rpm
-            dist/**/*.deb
-          generate_release_notes: true
+          draft: false
+          files: |-
+            ${{ env.ASSET }}
+            ${{ env.RPM_ASSET }}
+            ${{ env.DEB_ASSET }}
 
   publish:
-    name: Publish to crates.io
+    name: Publish
     runs-on: ubuntu-latest
     needs:
-      - github-release
-    if: github.event_name == 'push' && github.ref_type == 'tag'
-
+      - build
+    # Only publish to crates.io on tag pushes that DON'T start with 't'
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') && !startsWith(github.ref_name,
+      't')
+    continue-on-error: true
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - name: Checkout sources
+        uses: actions/checkout@v6
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Cache Cargo
-        uses: Swatinem/rust-cache@v2
-
-      - name: Publish
-        run: cargo publish --locked --token "${CRATES_TOKEN}"
+      - run: cargo publish --token ${CRATES_TOKEN}
         env:
           CRATES_TOKEN: ${{ secrets.CRATES_TOKEN }}
