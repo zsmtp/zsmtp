@@ -219,6 +219,9 @@ deploy-minor: bump-minor _deploy-merge-and-tag
 # Deploy with major version bump
 deploy-major: bump-major _deploy-merge-and-tag
 
+# Deploy without bumping version
+deploy-current: check-develop check-clean test _deploy-merge-and-tag
+
 # Create & push a test tag like t-YYYYMMDD-HHMMSS (skips publish/release in CI)
 # Usage:
 #   just t-deploy
