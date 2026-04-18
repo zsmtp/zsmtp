@@ -19,7 +19,6 @@ jobs:
     runs-on: ${{ matrix.os }}
     needs:
       - test
-      - containers
 
     strategy:
       matrix:
