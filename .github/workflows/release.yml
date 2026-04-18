@@ -1,0 +1,139 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    uses: ./.github/workflows/test.yml
+
+  build:
+    name: Build Release Assets (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            archive_name: zsmtp-linux-x86_64
+            binary_name: zsmtp
+            package_linux: true
+          - os: macos-latest
+            archive_name: zsmtp-macos
+            binary_name: zsmtp
+            package_linux: false
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Resolve Version
+        id: version
+        shell: bash
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            echo "value=${GITHUB_REF_NAME}" >> "${GITHUB_OUTPUT}"
+          else
+            VERSION="$(awk -F '"' '/^version = / {print $2; exit}' Cargo.toml)"
+            echo "value=v${VERSION}" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Build
+        run: cargo build --release --locked
+
+      - name: Install Linux Packaging Tools
+        if: matrix.package_linux
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deb,cargo-generate-rpm
+
+      - name: Build Linux Packages
+        if: matrix.package_linux
+        shell: bash
+        run: |
+          cargo generate-rpm
+          cargo deb --no-build
+
+      - name: Archive Binary
+        shell: bash
+        run: |
+          version="${{ steps.version.outputs.value }}"
+          archive_dir="${{ matrix.archive_name }}-${version}"
+          mkdir -p "${archive_dir}"
+          cp "target/release/${{ matrix.binary_name }}" "${archive_dir}/zsmtp"
+          tar -czf "${archive_dir}.tar.gz" "${archive_dir}"
+
+      - name: Upload Release Archives
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.archive_name }}-artifacts
+          path: |
+            *.tar.gz
+
+      - name: Upload Linux Packages
+        if: matrix.package_linux
+        uses: actions/upload-artifact@v4
+        with:
+          name: zsmtp-linux-packages
+          path: |
+            target/generate-rpm/*.rpm
+            target/debian/*.deb
+
+  github-release:
+    name: GitHub Release
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref_type == 'tag'
+
+    steps:
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+
+      - name: Publish Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/**/*.tar.gz
+            dist/**/*.rpm
+            dist/**/*.deb
+          generate_release_notes: true
+
+  publish:
+    name: Publish to crates.io
+    runs-on: ubuntu-latest
+    needs:
+      - github-release
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Publish
+        run: cargo publish --locked --token "${CRATES_TOKEN}"
+        env:
+          CRATES_TOKEN: ${{ secrets.CRATES_TOKEN }}

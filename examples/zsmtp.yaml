@@ -1,0 +1,17 @@
+server:
+  bind_address: "127.0.0.1:2525"
+  hostname: "mail.local"
+  spool_dir: "./var/spool/zsmtp"
+  max_message_size: 10485760
+submit:
+  queue_dir: "./var/queue/zsmtp"
+  allow_stdin: true
+  default_sender_domain: "local.test"
+protocol:
+  profile: "zk-smtp-draft-0"
+  require_starttls: false
+  zero_knowledge: true
+crypto:
+  key_file: "./var/lib/zsmtp/server.key"
+  envelope_scheme: "hybrid-envelope"
+  proof_system: "placeholder-proof"
