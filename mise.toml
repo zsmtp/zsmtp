@@ -1,0 +1,27 @@
+[settings]
+cargo.binstall = true
+minimum_release_age = "0"
+
+[tools]
+"cargo:cargo-audit" = "latest"
+"cargo:cargo-deny" = "latest"
+"cargo:cargo-edit" = "latest"
+"cargo:cargo-watch" = "latest"
+"github:nbari/slick" = "latest"
+bat = "latest"
+eza = "latest"
+go = "latest"
+just = "latest"
+node = "lts"
+"pipx:yamllint" = "1.38.0"
+python = "3.14"
+ripgrep = "latest"
+tmux = "latest"
+tree-sitter = "latest"
+uv = "latest"
+glow = "latest"
+fd = "latest"
+
+[env]
+EDITOR = "nvim"
+VISUAL = "nvim"
