@@ -2,10 +2,16 @@ use anyhow::Result;
 use tracing::info;
 use zsmtp::cli;
 
-#[tokio::main(flavor = "current_thread")]
+#[cfg_attr(feature = "telemetry", tokio::main(flavor = "multi_thread"))]
+#[cfg_attr(not(feature = "telemetry"), tokio::main(flavor = "current_thread"))]
 async fn main() -> Result<()> {
-    let action = cli::start()?;
+    let result = cli::start().and_then(execute);
+    let _ = cli::telemetry::shutdown_tracer();
+    result
+}
 
+#[tracing::instrument(name = "zsmtp.execute", skip(action))]
+fn execute(action: cli::actions::Action) -> Result<()> {
     info!("starting zsmtp execution");
 
     let output = match action {
@@ -65,9 +71,6 @@ async fn main() -> Result<()> {
     if !output.stdout.is_empty() {
         println!("{}", output.stdout);
     }
-
-    cli::telemetry::shutdown_tracer();
-    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
 
     Ok(())
 }
