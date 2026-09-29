@@ -2,7 +2,7 @@ default: test
   @just --list
 
 # Test suite
-test: clippy fmt unit-test
+test: clippy fmt-check unit-test
   @echo "✅ All tests passed!"
 
 # Unit tests
@@ -24,6 +24,11 @@ clippy:
 fmt:
   @echo "🎨 Formatting code..."
   cargo fmt --all
+
+# Verify formatting without modifying source files
+fmt-check:
+  @echo "🎨 Checking formatting..."
+  cargo fmt --all -- --check
 
 # Run benchmarks
 bench:

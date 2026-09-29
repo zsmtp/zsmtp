@@ -25,7 +25,7 @@ Use Cargo directly or the `just` wrappers:
 - `cargo clippy --all-targets --all-features -- -D warnings`: enforce lint policy
 - `cargo fmt --all -- --check`: verify formatting
 - `cargo package --locked`: verify publish/package metadata
-- `just test`: runs `clippy`, `fmt`, and unit tests
+- `just test`: runs `clippy`, the `fmt-check` formatting check, and unit tests
 - `just coverage`: generate coverage with `cargo llvm-cov`
 
 ## Coding Style & Naming Conventions
