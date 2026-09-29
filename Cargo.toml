@@ -1,6 +1,6 @@
 [package]
 name = "zsmtp"
-version = "0.1.3"
+version = "0.1.4"
 authors = ["Team ZSMTP <team@zsmtp.dev>"]
 description = "A zero-knowledge SMTP mail transfer agent prototype"
 documentation = "https://docs.rs/zsmtp"
