@@ -10,7 +10,7 @@ use std::path::Path;
 /// Returns an error if configuration loading or YAML serialization fails.
 pub fn execute_show(config_path: Option<&Path>) -> Result<ActionOutput> {
     let loaded = config::load(config_path)?;
-    let yaml = serde_yaml::to_string(&loaded.config)?;
+    let yaml = serde_saphyr::to_string(&loaded.config)?;
     Ok(ActionOutput::new(format!(
         "# source: {}\n{}",
         loaded.source.describe(),

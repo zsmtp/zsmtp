@@ -200,7 +200,7 @@ fn load_from_path(path: &Path, source: ConfigSource) -> Result<LoadedConfig> {
 
     let raw = fs::read_to_string(path)
         .with_context(|| format!("failed to read configuration file {}", path.display()))?;
-    let config: AppConfig = serde_yaml::from_str(&raw)
+    let config: AppConfig = serde_saphyr::from_str(&raw)
         .with_context(|| format!("failed to parse YAML configuration {}", path.display()))?;
     config.validate()?;
     Ok(LoadedConfig { source, config })
