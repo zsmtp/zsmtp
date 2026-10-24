@@ -15,7 +15,7 @@ jobs:
     name: Coverage
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - uses: ./.github/actions/rust-toolchain
@@ -39,7 +39,7 @@ jobs:
           --ignore '../**' --ignore '/*' -o coverage.lcov
 
       - name: Upload to codecov.io
-        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
+        uses: codecov/codecov-action@v7
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
         with:
@@ -47,4 +47,4 @@ jobs:
           flags: rust
 
       - name: Coveralls GitHub Action
-        uses: coverallsapp/github-action@8d6379e14d29928660c4ba802d8e85393440b329 # v2.3.8
+        uses: coverallsapp/github-action@v2
