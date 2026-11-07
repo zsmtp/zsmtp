@@ -38,11 +38,12 @@ A release ships the exact commit that **Test & Build** already passed on `develo
 release workflow bumps and commits nothing.
 
 1. Work, including dependency updates (`just update`), lands on `sandbox`.
-2. When done, bump the version there (`cargo set-version --bump patch`; `minor` or `major`
-   for the others), merge `sandbox` into `develop` as a fast-forward so the history stays
-   linear, push, and wait for `develop`'s **Test & Build** run to pass.
-3. Run `just deploy` on `develop`. It checks that `develop` is pushed and the version is
-   not released yet, then starts `.github/workflows/release.yml`.
+2. The operator bumps the version (patch, minor or major) in `Cargo.toml` and `Cargo.lock`
+   with a tool of their choice, such as `cargo set-version --bump patch` or `gbump`, as
+   the last commit of the work. The reviewer checks that the bump is there and right.
+3. Merge `sandbox` into `develop` as a fast-forward so the history stays linear, push, and
+   wait for `develop`'s **Test & Build** run to pass.
+4. Run `just deploy`: it only starts `.github/workflows/release.yml` on `develop`.
 
 The workflow checks that the commit is green, that `Cargo.toml`'s version is not tagged
 yet and that `main` is an ancestor of it. It then builds the Linux x86_64 musl archive,
@@ -60,7 +61,7 @@ sha256sum --check --ignore-missing SHA256SUMS
 gh attestation verify <file> --repo zsmtp/zsmtp --signer-workflow zsmtp/zsmtp/.github/workflows/release.yml
 ```
 
-Releasing needs `just`, `gh` (logged in) and `cargo-edit` for `cargo set-version`.
+Releasing needs `just` and `gh` (logged in).
 
 `just hooks` enables the repository's git hooks (`.githooks`). Its `pre-push` hook refuses a
 push to `develop` or `main` whose `Cargo.toml` version is not above the latest release tag

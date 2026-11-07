@@ -59,21 +59,9 @@ clean:
 version:
     @cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version'
 
-# Bump first with `cargo set-version --bump patch` (cargo-edit); the workflow re-checks everything
-# Release develop: start the release workflow from a pushed, bumped develop
+# Release develop: start the release workflow (it checks the commit, the bump and CI itself)
 deploy:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    [[ "$(git branch --show-current)" == develop ]] || { echo "Run deploy on develop." >&2; exit 1; }
-    git fetch --quiet --tags origin
-    [[ "$(git rev-parse HEAD)" == "$(git rev-parse origin/develop)" ]] || { echo "develop is not pushed (or not up to date with origin)." >&2; exit 1; }
-    version="$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version')"
-    if git rev-parse -q --verify "refs/tags/${version}" >/dev/null; then
-        echo "${version} is already released; bump the version first." >&2
-        exit 1
-    fi
     gh workflow run release.yml --ref develop
-    echo "Releasing ${version}: gh run watch, or the Actions tab."
 
 # Use the repository's git hooks (.githooks): develop pushes must carry a bumped version
 hooks:
