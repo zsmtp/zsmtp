@@ -1,0 +1,39 @@
+name: Linux packages
+description: >-
+  Build the RPM and DEB of an already built release binary. The tools are pinned so a
+  package made later is made the same way; update them deliberately.
+inputs:
+  target:
+    description: Rust target the binary was built for.
+    required: true
+  package:
+    description: Package (binary) name.
+    required: true
+  out:
+    description: Directory that receives the .rpm and .deb files.
+    required: false
+    default: dist
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: |
+        set -euo pipefail
+        cargo install cargo-generate-rpm --version 0.21.0 --locked
+        cargo install cargo-deb --version 3.8.0 --locked
+
+    - shell: bash
+      env:
+        TARGET: ${{ inputs.target }}
+        PACKAGE: ${{ inputs.package }}
+        OUT: ${{ inputs.out }}
+      run: |
+        set -euo pipefail
+        strip -s "target/${TARGET}/release/${PACKAGE}" || true
+        # The packagers read the binary from target/release.
+        mkdir -p target/release "${OUT}"
+        ln -sf "../${TARGET}/release/${PACKAGE}" "target/release/${PACKAGE}"
+        cargo generate-rpm
+        cargo deb --no-build
+        cp target/generate-rpm/*.rpm target/debian/*.deb "${OUT}/"
+        ls -al "${OUT}"

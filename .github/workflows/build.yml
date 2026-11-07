@@ -65,6 +65,15 @@ jobs:
         if: matrix.build != 'linux'
         run: cargo build --release --locked --target ${{ matrix.target }}
 
+      # Packaging is checked here too, so a broken RPM/DEB definition fails CI on
+      # develop instead of the release.
+      - name: Package RPM and DEB
+        if: matrix.build == 'linux'
+        uses: ./.github/actions/linux-packages
+        with:
+          target: ${{ matrix.target }}
+          package: ${{ steps.package.outputs.name }}
+
   # One aggregate check for branch protection and the release flow: it passes only
   # when every gating job succeeded, so the required check never depends on job or
   # matrix names. Coverage is reported, not a gate.

@@ -104,40 +104,26 @@ jobs:
           sudo apt-get update -y
           sudo apt-get install -y musl-dev musl-tools
 
-      # Pinned, so a release built later packages the same way; update deliberately.
-      - name: Install packaging tools (RPM/DEB)
-        if: matrix.build == 'linux'
-        run: |
-          cargo install cargo-generate-rpm --version 0.21.0 --locked
-          cargo install cargo-deb --version 3.8.0 --locked
-
       - name: Build
         run: cargo build --release --locked --target ${{ matrix.target }}
+
+      # Strips the binary too, so the archive holds the same binary as the packages.
+      - name: Package RPM and DEB
+        if: matrix.build == 'linux'
+        uses: ./.github/actions/linux-packages
+        with:
+          target: ${{ matrix.target }}
+          package: ${{ env.PACKAGE }}
 
       - name: Package the archive
         shell: bash
         run: |
           set -euo pipefail
-          mkdir dist
+          mkdir -p dist
           dirname="${PACKAGE}-${VERSION}-${{ matrix.target }}"
           mkdir "${dirname}"
           cp "target/${{ matrix.target }}/release/${PACKAGE}" "${dirname}/"
           tar -czf "dist/${dirname}.tar.gz" "${dirname}"
-
-      - name: Package RPM and DEB
-        if: matrix.build == 'linux'
-        shell: bash
-        run: |
-          set -euo pipefail
-          BIN="target/${{ matrix.target }}/release/${PACKAGE}"
-          strip -s "${BIN}" || true
-          # The packagers read the binary from target/release.
-          mkdir -p target/release
-          ln -sf "../${{ matrix.target }}/release/${PACKAGE}" "target/release/${PACKAGE}"
-          cargo generate-rpm
-          cargo deb --no-build
-          cp target/generate-rpm/*.rpm dist/
-          cp target/debian/*.deb dist/
 
       - name: Upload the release files
         uses: actions/upload-artifact@v7
