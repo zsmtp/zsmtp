@@ -1,3 +1,5 @@
+import '.justfiles/deploy.just'
+
 default: test
   @just --list
 
@@ -59,48 +61,9 @@ clean:
 version:
     @cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version'
 
-# Releases run scripts/release: the version bump is staged on the scratch `release`
-# branch, Test & Build and a candidate run of release.yml (every test, build and package,
-# published nowhere) test that exact commit, and only then do develop, main and the
-# signed tag move together in one atomic push; the tag's run publishes exactly what the
-# candidate run built. Every deploy recipe is idempotent: rerunning it resumes the staged
-# candidate, or says there is nothing left to release. See README "Releasing".
-
-# Deploy: stage a patch bump, test and package it, then release it
-deploy:
-    @scripts/release deploy patch
-
-# Deploy with minor version bump
-deploy-minor:
-    @scripts/release deploy minor
-
-# Deploy with major version bump
-deploy-major:
-    @scripts/release deploy major
-
-# Release develop's version as is when it has no tag yet (no new bump)
-deploy-current:
-    @scripts/release deploy current
-
-# Show where a release stands: develop, main, the staged candidate and its runs
-release-status:
-    @scripts/release status
-
-# Check everything a release needs; changes nothing that lasts
-release-preflight:
-    @scripts/release preflight
-
-# Publish an existing release tag again if its own run cannot (recovery run on main)
-release-republish version:
-    @scripts/release republish {{version}}
-
-# Apply branch protection (main requires "CI OK") and the rule that release tags never move
-protect-branches:
-    @scripts/release protect
-
-# Build and package the current branch like a release candidate; releases nothing, no tag
-release-dry-run:
-    @scripts/release dry-run
+# Releases come from the release framework (nbari/release); recipes live in
+# .justfiles/deploy.just. Configuration: .release-flow.json; adapter: tools/adapter.sh.
+# See README "Releasing".
 
 # Check for security vulnerabilities
 audit:
