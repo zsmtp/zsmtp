@@ -43,11 +43,13 @@ release workflow bumps and commits nothing.
    the last commit of the work. The reviewer checks that the bump is there and right.
 3. Merge `sandbox` into `develop` as a fast-forward so the history stays linear, push, and
    wait for `develop`'s **Test & Build** run to pass.
-4. Run `just deploy`: it only starts `.github/workflows/release.yml` on `develop`.
+4. Run `just deploy`: it starts `.github/workflows/release.yml` on `develop` and follows
+   the run, so a refusal by the workflow's guard shows in your terminal.
 
-The workflow checks that the commit is green, that `Cargo.toml`'s version is not tagged
-yet and that `main` is an ancestor of it. It then builds the Linux x86_64 musl archive,
-RPM and DEB and the macOS x86_64 archive, packages the crate, attests the build
+The workflow checks that the commit is green, that `Cargo.toml`'s version is above the
+latest release and not tagged yet, and that `main` is an ancestor of it. It then builds
+the Linux archives, RPMs and DEBs for x86_64 and aarch64 (musl, static) and the macOS
+archives for x86_64 and Apple Silicon, packages the crate, attests the build
 provenance, publishes the GitHub release (which creates the tag at that commit),
 fast-forwards `main` to it, and publishes the crate through crates.io
 [Trusted Publishing](https://crates.io/docs/trusted-publishing) (no stored token).
