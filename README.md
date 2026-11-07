@@ -52,9 +52,23 @@ provenance, publishes the GitHub release (which creates the tag at that commit),
 fast-forwards `main` to it, and publishes the crate through crates.io
 [Trusted Publishing](https://crates.io/docs/trusted-publishing) (no stored token).
 
-If a job fails, fix the cause and use "Re-run failed jobs" on the run: finished jobs are
-not repeated, a draft release left by a failed run is replaced, and a version already on
-crates.io is skipped. To verify a download:
+`Test & Build` already runs, on every push, what the release will do before anything is
+published: the build, a run of the binary (`--version` must report the crate's version),
+the RPM and DEB (checked for version and installed binary), and `cargo package` plus
+`cargo publish --dry-run`. A problem there fails `develop` before you run `just deploy`,
+so the release does not normally fail on content.
+
+If a release job still fails, what to do depends on when:
+
+- **Before the `GitHub release` job succeeds:** nothing is published and no tag exists.
+  Fix the cause and use "Re-run failed jobs" (or fix the code, merge to `develop` and run
+  `just deploy` again). A draft release left by a failed run is replaced.
+- **After it (the tag exists, so `main` or crates.io failed):** the release and tag are
+  immutable and cannot be moved or deleted. A transient failure is fixed by "Re-run failed
+  jobs": the `main` job fast-forwards `main`, and the crates.io job skips a version it
+  already has. If the fix needs a code change, bump to the next version and release that.
+
+To verify a download:
 
 ```sh
 sha256sum --check --ignore-missing SHA256SUMS
@@ -66,3 +80,6 @@ Releasing needs `just` and `gh` (logged in).
 `just hooks` enables the repository's git hooks (`.githooks`). Its `pre-push` hook refuses a
 push to `develop` or `main` whose `Cargo.toml` version is not above the latest release tag
 (`git push --no-verify` skips it). The release workflow checks the same thing in CI.
+
+Third-party actions are pinned by full commit SHA (the tag is in the comment beside it);
+Dependabot opens the update pull requests.
