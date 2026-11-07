@@ -1,5 +1,3 @@
-import '.justfiles/deploy.just'
-
 default: test
   @just --list
 
@@ -61,9 +59,13 @@ clean:
 version:
     @cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version'
 
-# Releases come from the release framework (nbari/release); recipes live in
-# .justfiles/deploy.just. Configuration: .release-flow.json; adapter: tools/adapter.sh.
-# See README "Releasing".
+# Bump the version (patch, minor or major); commit it on develop and let Test & Build pass
+bump level="patch":
+    cargo set-version --bump {{level}}
+
+# Release develop's HEAD (run once its Test & Build is green); see README "Releasing"
+release:
+    gh workflow run release.yml --ref develop
 
 # Check for security vulnerabilities
 audit:

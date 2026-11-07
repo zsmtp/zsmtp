@@ -1,33 +1,316 @@
-# release-flow publishers, called at a pinned commit. Copy to
-# .github/workflows/release.yml; replace 0ea9277ceb57331369705498f83fa6afd4d25357 with the full
-# commit SHA that .release-flow.json "pipeline.sha" also names.
+---
 name: Release
 
+# Run manually on `develop` (`just release`). The commit is the one Test & Build already
+# passed on develop; nothing is bumped or committed here. The run builds that commit,
+# publishes the GitHub release (which creates the tag), fast-forwards `main` to it and
+# publishes the crate. A failed job is fixed by "Re-run failed jobs"; nothing has moved
+# before the release job succeeds.
 on:
-  push:
-    tags: ['[0-9]+.[0-9]+.[0-9]+']
   workflow_dispatch:
-    inputs:
-      version:
-        description: Promoted release version (X.Y.Z)
-        required: true
-        type: string
-      channel:
-        description: Channel to (re)publish
-        required: true
-        type: choice
-        options: [github-release, oci, crates-io, docs, helm]
 
 permissions:
   contents: read
 
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 jobs:
+  guard:
+    name: Release guard
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      version: ${{ steps.check.outputs.version }}
+      package: ${{ steps.check.outputs.package }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Check the commit can be released
+        id: check
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_REF}" != refs/heads/develop ]]; then
+            echo "::error::Run the release on develop (got ${GITHUB_REF})."
+            exit 1
+          fi
+          version="$(awk -F'"' '/^version = /{print $2; exit}' Cargo.toml)"
+          package="$(awk -F'"' '/^name = /{print $2; exit}' Cargo.toml)"
+          if [[ ! "${version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Cargo.toml has no X.Y.Z version (found '${version}')."
+            exit 1
+          fi
+          if git rev-parse -q --verify "refs/tags/${version}" >/dev/null; then
+            echo "::error::${version} is already tagged; bump the version on develop first."
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor origin/main "${GITHUB_SHA}"; then
+            echo "::error::main has commits that develop does not; merge main into develop first."
+            exit 1
+          fi
+          passed="$(gh run list --repo "${GITHUB_REPOSITORY}" --workflow build.yml \
+            --commit "${GITHUB_SHA}" --event push --status success --limit 1 \
+            --json databaseId --jq '.[0].databaseId // empty')"
+          if [[ -z "${passed}" ]]; then
+            echo "::error::${GITHUB_SHA} has no successful Test & Build run."
+            exit 1
+          fi
+          {
+            echo "version=${version}"
+            echo "package=${package}"
+          } >> "$GITHUB_OUTPUT"
+          echo "Releasing ${package} ${version} from ${GITHUB_SHA} (Test & Build run ${passed})."
+
+  build:
+    name: Build and package (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    needs: guard
+    env:
+      VERSION: ${{ needs.guard.outputs.version }}
+      PACKAGE: ${{ needs.guard.outputs.package }}
+    strategy:
+      matrix:
+        include:
+          - build: linux
+            os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+          - build: macos
+            os: macos-latest
+            target: x86_64-apple-darwin
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Install Rust
+        uses: ./.github/actions/rust-toolchain
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install system deps (musl)
+        if: matrix.build == 'linux'
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y musl-dev musl-tools
+
+      # Pinned, so a release built later packages the same way; update deliberately.
+      - name: Install packaging tools (RPM/DEB)
+        if: matrix.build == 'linux'
+        run: |
+          cargo install cargo-generate-rpm --version 0.21.0 --locked
+          cargo install cargo-deb --version 3.8.0 --locked
+
+      - name: Build
+        run: cargo build --release --locked --target ${{ matrix.target }}
+
+      - name: Package the archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir dist
+          dirname="${PACKAGE}-${VERSION}-${{ matrix.target }}"
+          mkdir "${dirname}"
+          cp "target/${{ matrix.target }}/release/${PACKAGE}" "${dirname}/"
+          tar -czf "dist/${dirname}.tar.gz" "${dirname}"
+
+      - name: Package RPM and DEB
+        if: matrix.build == 'linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          BIN="target/${{ matrix.target }}/release/${PACKAGE}"
+          strip -s "${BIN}" || true
+          # The packagers read the binary from target/release.
+          mkdir -p target/release
+          ln -sf "../${{ matrix.target }}/release/${PACKAGE}" "target/release/${PACKAGE}"
+          cargo generate-rpm
+          cargo deb --no-build
+          cp target/generate-rpm/*.rpm dist/
+          cp target/debian/*.deb dist/
+
+      - name: Upload the release files
+        uses: actions/upload-artifact@v7
+        with:
+          name: dist-${{ matrix.target }}
+          path: dist/*
+          if-no-files-found: error
+
+  crate:
+    name: Package the crate
+    runs-on: ubuntu-latest
+    needs: guard
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Install Rust
+        uses: ./.github/actions/rust-toolchain
+
+      - name: Package and verify the crate
+        run: cargo package --locked
+
+      - name: Upload the crate
+        uses: actions/upload-artifact@v7
+        with:
+          name: dist-crate
+          path: target/package/*.crate
+          if-no-files-found: error
+
   release:
-    uses: nbari/release/.github/workflows/release.yml@0ea9277ceb57331369705498f83fa6afd4d25357
-    with:
-      version: ${{ inputs.version }}
-      channel: ${{ inputs.channel }}
+    name: GitHub release
+    runs-on: ubuntu-latest
+    needs:
+      - guard
+      - build
+      - crate
     permissions:
       contents: write
-      packages: write
       id-token: write
+      attestations: write
+    env:
+      VERSION: ${{ needs.guard.outputs.version }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Download the release files
+        uses: actions/download-artifact@v8
+        with:
+          pattern: dist-*
+          merge-multiple: true
+          path: dist
+
+      - name: Write the checksums
+        run: |
+          set -euo pipefail
+          cd dist
+          sha256sum -- * > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: dist/*
+
+      # The notes are the commit subjects since the previous release (version bumps left
+      # out), so no changelog is kept by hand and every re-run writes the same text.
+      - name: Write the release notes
+        shell: bash
+        run: |
+          set -euo pipefail
+          previous="$(git describe --tags --abbrev=0 --match '[0-9]*.[0-9]*.[0-9]*' "${GITHUB_SHA}" 2>/dev/null || true)"
+          range="${GITHUB_SHA}"
+          [[ -z "${previous}" ]] || range="${previous}..${GITHUB_SHA}"
+          changes="$(git log --no-merges --format='- %s (%h)' "${range}" | grep -vE '^- bump version to [0-9]+\.[0-9]+\.[0-9]+ ' || true)"
+          {
+            echo "## Changes"
+            echo
+            echo "${changes:-- Only the version bump.}"
+            if [[ -n "${previous}" ]]; then
+              echo
+              echo "**Full changelog**: https://github.com/${GITHUB_REPOSITORY}/compare/${previous}...${VERSION}"
+            fi
+            echo
+            echo "## Verify a download"
+            echo
+            echo '```sh'
+            echo 'sha256sum --check --ignore-missing SHA256SUMS'
+            echo "gh attestation verify <file> --repo ${GITHUB_REPOSITORY} --signer-workflow ${GITHUB_REPOSITORY}/.github/workflows/release.yml"
+            echo '```'
+          } > "${RUNNER_TEMP}/notes.md"
+          cat "${RUNNER_TEMP}/notes.md"
+
+      # Assets go on a draft first: publishing creates the tag at the tested commit, and
+      # an immutable release accepts no uploads afterwards. A draft left by a failed run
+      # is replaced; a published release is left alone.
+      - name: Create the release
+        shell: bash
+        run: |
+          set -euo pipefail
+          if state="$(gh release view "${VERSION}" --json isDraft --jq .isDraft 2>/dev/null)"; then
+            if [[ "${state}" == false ]]; then
+              echo "Release ${VERSION} is already published."
+              exit 0
+            fi
+            gh release delete "${VERSION}" --yes
+          fi
+          gh release create "${VERSION}" dist/* \
+            --draft \
+            --target "${GITHUB_SHA}" \
+            --title "${VERSION}" \
+            --notes-file "${RUNNER_TEMP}/notes.md"
+          gh release edit "${VERSION}" --draft=false --latest
+
+  main:
+    name: Fast-forward main
+    runs-on: ubuntu-latest
+    needs: release
+    permissions:
+      contents: write
+    steps:
+      # force=false: the API refuses anything but a fast-forward.
+      - name: Move main to the released commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api --method PATCH "repos/${GITHUB_REPOSITORY}/git/refs/heads/main" \
+            -f sha="${GITHUB_SHA}" -F force=false
+
+  publish:
+    name: Publish to crates.io
+    runs-on: ubuntu-latest
+    needs:
+      - guard
+      - release
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      VERSION: ${{ needs.guard.outputs.version }}
+      PACKAGE: ${{ needs.guard.outputs.package }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Install Rust
+        uses: ./.github/actions/rust-toolchain
+
+      - name: Is it already on crates.io
+        id: exists
+        shell: bash
+        run: |
+          if curl -sf -A "${PACKAGE}-release" "https://crates.io/api/v1/crates/${PACKAGE}/${VERSION}" >/dev/null; then
+            echo "${PACKAGE} ${VERSION} is already on crates.io."
+            echo "published=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Short-lived token from crates.io Trusted Publishing; no registry secret is stored.
+      - name: Get a crates.io token
+        id: auth
+        if: steps.exists.outputs.published != 'true'
+        uses: rust-lang/crates-io-auth-action@v1
+
+      - name: Publish
+        if: steps.exists.outputs.published != 'true'
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+        run: cargo publish --locked --no-verify

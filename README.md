@@ -34,34 +34,28 @@ See [`examples/zsmtp.yaml`](examples/zsmtp.yaml) for the initial YAML shape.
 
 ## Releasing
 
-Releases use the [release](https://github.com/nbari/release) framework, pinned by full
-SHA in `.release-flow.json` and both workflow callers. A candidate is built once from an
-exact commit, verified against its manifest, retained, and promoted as that same commit;
-publishing reuses the retained bytes and never rebuilds. The project-specific part is
-`tools/adapter.sh`: the framework's Cargo adapter plus the `.crate` artifact.
+A release ships the exact commit that **Test & Build** already passed on `develop`; the
+release workflow bumps and commits nothing.
 
-Work, including dependency updates (`just update`), lands on `sandbox`. When its
-**Test & Build** run is green, merge it into `develop` and prepare a candidate from a
-clean `develop`:
+1. Work, including dependency updates (`just update`), lands on `sandbox`, then `develop`.
+2. Bump the version as a normal commit on `develop` (`just bump`, or `just bump minor` /
+   `major`) and wait for its **Test & Build** run to pass.
+3. Run `just release` (it starts `.github/workflows/release.yml` on `develop`).
+
+The workflow checks that the commit is green, that `Cargo.toml`'s version is not tagged
+yet and that `main` is an ancestor of it. It then builds the Linux x86_64 musl archive,
+RPM and DEB and the macOS x86_64 archive, packages the crate, attests the build
+provenance, publishes the GitHub release (which creates the tag at that commit),
+fast-forwards `main` to it, and publishes the crate through crates.io
+[Trusted Publishing](https://crates.io/docs/trusted-publishing) (no stored token).
+
+If a job fails, fix the cause and use "Re-run failed jobs" on the run: finished jobs are
+not repeated, a draft release left by a failed run is replaced, and a version already on
+crates.io is skipped. To verify a download:
 
 ```sh
-just deploy                       # patch; deploy-minor / deploy-major for the others
-just release-candidates
-just release-status X.Y.Z --json
-just release-promote release/X.Y.Z-<base12> <candidate-sha> --dry-run
-just release-promote release/X.Y.Z-<base12> <candidate-sha>
+sha256sum --check --ignore-missing SHA256SUMS
+gh attestation verify <file> --repo zsmtp/zsmtp --signer-workflow zsmtp/zsmtp/.github/workflows/release.yml
 ```
 
-`just deploy-test` (from `sandbox`) builds a `release/test/...` candidate that cannot be
-promoted. Recovery: `just release-retry X.Y.Z <channel>`; cleanup: `just release-prune --dry-run`.
-
-The candidate workflow (`.github/workflows/candidate.yml`) runs fmt, clippy and tests,
-then packages the Linux x86_64 musl archive, RPM and DEB, the macOS x86_64 archive and
-the crate. The signed tag triggers `.github/workflows/release.yml`, which publishes the
-GitHub release and, as an optional channel, crates.io. Channels are configured under
-`publishers` in `.release-flow.json`.
-
-Releasing needs `just`, `jq`, `gh` (logged in), git 2.31 or later and a signing key that
-GitHub knows as a signing key. One-time repository setup (rulesets, the `candidate-storage`
-and `publish-*` environments, GitHub storage bootstrap) is described in the framework's
-[adoption guide](https://github.com/nbari/release/blob/main/docs/ADOPTION.md).
+Releasing needs `just`, `gh` (logged in) and `cargo-edit` for `just bump`.
