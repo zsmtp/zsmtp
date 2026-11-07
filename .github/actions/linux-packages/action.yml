@@ -16,7 +16,18 @@ inputs:
 runs:
   using: composite
   steps:
-    - shell: bash
+    # Compiling both tools dominates the job, so the installed binaries are cached; the
+    # key holds the pinned versions, so bumping a version below installs it afresh.
+    - id: tools
+      uses: actions/cache@v6
+      with:
+        path: |
+          ~/.cargo/bin/cargo-generate-rpm
+          ~/.cargo/bin/cargo-deb
+        key: linux-packages-${{ runner.os }}-rpm-0.21.0-deb-3.8.0
+
+    - if: steps.tools.outputs.cache-hit != 'true'
+      shell: bash
       run: |
         set -euo pipefail
         cargo install cargo-generate-rpm --version 0.21.0 --locked

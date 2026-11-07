@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# Pushes to develop (and main) must carry a Cargo.toml version above the latest release tag,
+# so a release is always one `just deploy` away. Bypass once with `git push --no-verify`.
+set -euo pipefail
+
+zero=0000000000000000000000000000000000000000
+while read -r _ local_sha remote_ref _; do
+  case "${remote_ref}" in
+    refs/heads/develop | refs/heads/main) ;;
+    *) continue ;;
+  esac
+  [[ "${local_sha}" != "${zero}" ]] || continue
+  version="$(git show "${local_sha}:Cargo.toml" | awk -F'"' '/^version = /{print $2; exit}')"
+  latest="$(git tag --list '[0-9]*.[0-9]*.[0-9]*' | sort -V | tail -n 1)"
+  [[ -n "${latest}" ]] || continue
+  if [[ "${version}" == "${latest}" || "$(printf '%s\n%s\n' "${latest}" "${version}" | sort -V | tail -n 1)" != "${version}" ]]; then
+    echo "pre-push: ${remote_ref#refs/heads/} has version ${version}, not above the latest release ${latest}." >&2
+    echo "Bump it (cargo set-version --bump patch), or push with --no-verify." >&2
+    exit 1
+  fi
+done

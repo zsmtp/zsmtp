@@ -41,29 +41,11 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Get package name from Cargo.toml
-        id: package
-        shell: bash
-        run: |
-          PACKAGE_NAME=$(awk -F '"' '/^name = / {print $2; exit}' Cargo.toml)
-          echo "name=$PACKAGE_NAME" >> "$GITHUB_OUTPUT"
-          echo "Package name: $PACKAGE_NAME"
-
-      - name: Install Rust
-        uses: ./.github/actions/rust-toolchain
-        with:
-          targets: ${{ matrix.target }}
-
-      - run: sudo apt -y install musl-dev musl-tools
-        if: matrix.build == 'linux'
-
-      - name: Build (Linux musl)
-        if: matrix.build == 'linux'
-        run: cargo build --release --locked --target ${{ matrix.target }}
-
       - name: Build
-        if: matrix.build != 'linux'
-        run: cargo build --release --locked --target ${{ matrix.target }}
+        id: build
+        uses: ./.github/actions/build-binary
+        with:
+          target: ${{ matrix.target }}
 
       # Packaging is checked here too, so a broken RPM/DEB definition fails CI on
       # develop instead of the release.
@@ -72,7 +54,7 @@ jobs:
         uses: ./.github/actions/linux-packages
         with:
           target: ${{ matrix.target }}
-          package: ${{ steps.package.outputs.name }}
+          package: ${{ steps.build.outputs.name }}
 
   # One aggregate check for branch protection and the release flow: it passes only
   # when every gating job succeeded, so the required check never depends on job or

@@ -1,0 +1,47 @@
+name: Build binary
+description: >-
+  Install Rust and the target's prerequisites, then build the locked release binary.
+  Expects the repository to be checked out.
+inputs:
+  target:
+    description: Rust target triple.
+    required: true
+outputs:
+  name:
+    description: Package (binary) name.
+    value: ${{ steps.info.outputs.name }}
+  version:
+    description: Package version.
+    value: ${{ steps.info.outputs.version }}
+runs:
+  using: composite
+  steps:
+    - id: info
+      uses: ./.github/actions/crate-info
+
+    - uses: ./.github/actions/rust-toolchain
+      with:
+        targets: ${{ inputs.target }}
+
+    - name: Install musl tools
+      if: contains(inputs.target, 'musl')
+      shell: bash
+      run: |
+        sudo apt-get update -y
+        sudo apt-get install -y musl-dev musl-tools
+
+    # Downloaded crate sources only, never build output, so a build is always from scratch.
+    - uses: actions/cache@v6
+      with:
+        path: |
+          ~/.cargo/registry/index
+          ~/.cargo/registry/cache
+          ~/.cargo/git/db
+        key: cargo-registry-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+        restore-keys: cargo-registry-${{ runner.os }}-
+
+    - name: Build
+      shell: bash
+      env:
+        TARGET: ${{ inputs.target }}
+      run: cargo build --release --locked --target "${TARGET}"
