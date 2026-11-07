@@ -1,0 +1,118 @@
+{
+  "schema_version": 1,
+  "bundle_version": "0.1.0",
+  "source_commit": "0ea9277ceb57331369705498f83fa6afd4d25357",
+  "profile": "github",
+  "files": [
+    {
+      "path": ".github/workflows/candidate.yml",
+      "sha256": "bd18a029619eb6236b30bff53a4a814d0f44c8c09b33bb8e4698850eab680056",
+      "mode": "644"
+    },
+    {
+      "path": ".github/workflows/release.yml",
+      "sha256": "958462758fe46e3f740ea5cdc5a54c8de8ea2495f7b1556679ec42cbd9d37179",
+      "mode": "644"
+    },
+    {
+      "path": ".justfiles/deploy.just",
+      "sha256": "a9271257a391f10ad5c886065c5702d7d89d689856739be2d784f846ab8fe84d",
+      "mode": "644"
+    },
+    {
+      "path": "scripts/adapters/cargo.sh",
+      "sha256": "0ce4d31c90f90f53932faf82320aae3cda136aeeddc15da402234e4a05a0c17e",
+      "mode": "755"
+    },
+    {
+      "path": "scripts/lib/common.sh",
+      "sha256": "9a627be30cc6af68634c0c861f65c71d83dddd4d163eba2734c867e1281c731f",
+      "mode": "755"
+    },
+    {
+      "path": "scripts/lib/github.sh",
+      "sha256": "7a223368022acf8789517e40a35866a022e9eb37640aaf331885cb968a5f5221",
+      "mode": "755"
+    },
+    {
+      "path": "scripts/lib/schema.sh",
+      "sha256": "59e95885aa2edb179796fe39403ee372da2519d73a3e24a939e8481d73520197",
+      "mode": "755"
+    },
+    {
+      "path": "scripts/lib/tag.sh",
+      "sha256": "a046feacd9e6fbeea912ecf66363c1140411159468069c306b97842a949eadbf",
+      "mode": "755"
+    },
+    {
+      "path": "scripts/publication/latest.sh",
+      "sha256": "d2e82b050a0d1fc0c376bed54c9b0620c7de8c4a5e32d8440fd5e3322b48c99e",
+      "mode": "755"
+    },
+    {
+      "path": "scripts/publication/ledger.sh",
+      "sha256": "6f5995d604c43941d49cfee95956cd0e4f07aac1c9b9630cee355cac9383d10a",
+      "mode": "755"
+    },
+    {
+      "path": "scripts/publication/publish.sh",
+      "sha256": "0b612d0eac48715d34f3f923bdb1160872a9de1171fdb115ebb57cc7ec10fea2",
+      "mode": "755"
+    },
+    {
+      "path": "scripts/publication/resolve.sh",
+      "sha256": "898eb5176983d626fdef52c45472a0ae9c1bdfc0ffbf767735075ccaaceb5d6b",
+      "mode": "755"
+    },
+    {
+      "path": "scripts/publishers/github-release.sh",
+      "sha256": "9d05f98a0336c6ac59f4a360c9d91db1b56649eac0332e5a4478b1667ca17c4d",
+      "mode": "755"
+    },
+    {
+      "path": "scripts/release-candidates.sh",
+      "sha256": "802b0dfca65c34116b8691c80f9998cae7f741595a62621fc07361e885bc2da0",
+      "mode": "755"
+    },
+    {
+      "path": "scripts/release-deploy.sh",
+      "sha256": "24d34e1e9d54d342bd4dba02c260f6dd8ca68bd2e5d105337d1edd562e40b6eb",
+      "mode": "755"
+    },
+    {
+      "path": "scripts/release-prepare.sh",
+      "sha256": "6a56185f652fe683af470c4219bb0e29fe82ab96a435eae40f28fdfbff4a4dde",
+      "mode": "755"
+    },
+    {
+      "path": "scripts/release-promote.sh",
+      "sha256": "ad401716d666be9946e77056eb0c0a4d38bc7c992145a4501ba2321aef00c71c",
+      "mode": "755"
+    },
+    {
+      "path": "scripts/release-retry.sh",
+      "sha256": "2de83849cb5270155bdce2220e31d4269e43b5c9634b3869ebb1cad8d641bed2",
+      "mode": "755"
+    },
+    {
+      "path": "scripts/release-status.sh",
+      "sha256": "2be624d1627ed000aa98d52ec83d87cda640c95f3476b7fd23634355e3119724",
+      "mode": "755"
+    },
+    {
+      "path": "scripts/storage/backends/github.sh",
+      "sha256": "7fb5a365591f291a1977c9e424047e6f5433169717e5a18851ff1baba3cace79",
+      "mode": "755"
+    },
+    {
+      "path": "scripts/storage/storage.sh",
+      "sha256": "bec8d343105ac92f8e9896dfd0f0a3285dbdbc712df5752da4b7a2c6beb6fdb7",
+      "mode": "755"
+    },
+    {
+      "path": "scripts/verify-candidate.sh",
+      "sha256": "f28a8feb0e09baf7ed7184025a03db6ac77ad13068efa12005ce272261c6027c",
+      "mode": "755"
+    }
+  ]
+}
