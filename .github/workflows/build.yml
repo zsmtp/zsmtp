@@ -21,6 +21,7 @@ jobs:
   build:
     name: Build
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
     needs:
       - test
 
@@ -65,6 +66,7 @@ jobs:
   crate:
     name: Crate
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     needs:
       - test
     steps:
@@ -93,6 +95,7 @@ jobs:
       - build
       - crate
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Require every job to have succeeded
         shell: bash

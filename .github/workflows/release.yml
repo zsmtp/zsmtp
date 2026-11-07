@@ -20,6 +20,7 @@ jobs:
   guard:
     name: Release guard
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
       actions: read
@@ -60,6 +61,11 @@ jobs:
             echo "::error::${version} is already tagged; bump the version on develop first."
             exit 1
           fi
+          latest="$(git tag --list '[0-9]*.[0-9]*.[0-9]*' | sort -V | tail -n 1)"
+          if [[ -n "${latest}" && "$(printf '%s\n%s\n' "${latest}" "${version}" | sort -V | tail -n 1)" != "${version}" ]]; then
+            echo "::error::${version} is below the latest release ${latest}; bump to a higher version."
+            exit 1
+          fi
           if ! git merge-base --is-ancestor origin/main "${GITHUB_SHA}"; then
             echo "::error::main has commits that develop does not; merge main into develop first."
             exit 1
@@ -80,6 +86,7 @@ jobs:
   build:
     name: Build and package (${{ matrix.target }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
     needs: guard
     env:
       VERSION: ${{ needs.guard.outputs.version }}
@@ -138,6 +145,7 @@ jobs:
   crate:
     name: Package the crate
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     needs: guard
     steps:
       - name: Checkout
@@ -164,6 +172,7 @@ jobs:
   release:
     name: GitHub release
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     needs:
       - guard
       - build
@@ -174,6 +183,7 @@ jobs:
       attestations: write
     env:
       VERSION: ${{ needs.guard.outputs.version }}
+      PACKAGE: ${{ needs.guard.outputs.package }}
       GH_TOKEN: ${{ github.token }}
     steps:
       - name: Checkout
@@ -188,6 +198,31 @@ jobs:
           pattern: dist-*
           merge-multiple: true
           path: dist
+
+      # An immutable release cannot be completed later, so the file set is checked first.
+      # Keep this list in step with the build matrix: a missing or extra file stops the release.
+      - name: Check the release files
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected="$(
+            {
+              for target in x86_64-unknown-linux-musl aarch64-unknown-linux-musl x86_64-apple-darwin; do
+                echo "${PACKAGE}-${VERSION}-${target}.tar.gz"
+              done
+              echo "${PACKAGE}-${VERSION}.crate"
+              echo "${PACKAGE}_${VERSION}-1_amd64.deb"
+              echo "${PACKAGE}_${VERSION}-1_arm64.deb"
+              echo "${PACKAGE}-${VERSION}-1.x86_64.rpm"
+              echo "${PACKAGE}-${VERSION}-1.aarch64.rpm"
+            } | sort
+          )"
+          actual="$(ls dist | sort)"
+          if [[ "${actual}" != "${expected}" ]]; then
+            echo "::error::The built files differ from the expected set."
+            diff <(echo "${expected}") <(echo "${actual}") || true
+            exit 1
+          fi
 
       - name: Write the checksums
         run: |
@@ -250,9 +285,29 @@ jobs:
             --notes-file "${RUNNER_TEMP}/notes.md"
           gh release edit "${VERSION}" --draft=false --latest
 
+      # What a user can download must be exactly what was built, and the tag must sit on the
+      # tested commit. This also runs when a re-run finds the release already published.
+      - name: Check the published release
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag_sha="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${VERSION}" --jq '.object.sha')"
+          if [[ "${tag_sha}" != "${GITHUB_SHA}" ]]; then
+            echo "::error::Tag ${VERSION} points at ${tag_sha}, not at the tested commit ${GITHUB_SHA}."
+            exit 1
+          fi
+          expected="$(ls dist | sort)"
+          actual="$(gh release view "${VERSION}" --json assets --jq '.assets[].name' | sort)"
+          if [[ "${actual}" != "${expected}" ]]; then
+            echo "::error::Release ${VERSION} holds: $(tr '\n' ' ' <<<"${actual}"); expected: $(tr '\n' ' ' <<<"${expected}")."
+            exit 1
+          fi
+          echo "Release ${VERSION} is on ${GITHUB_SHA} with $(wc -l <<<"${actual}") files."
+
   main:
     name: Fast-forward main
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     needs: release
     permissions:
       contents: write
@@ -268,6 +323,7 @@ jobs:
   publish:
     name: Publish to crates.io
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     needs:
       - guard
       - release
