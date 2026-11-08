@@ -2207,7 +2207,7 @@ checksum = "29666d0abbfad1e3dc4dcf6144730dd3a3ab225bbbdac83319345b1b44ccfc1b"
 
 [[package]]
 name = "zsmtp"
-version = "0.1.9"
+version = "0.1.10"
 dependencies = [
  "anyhow",
  "base64 0.23.1",
