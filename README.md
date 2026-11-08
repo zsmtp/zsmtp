@@ -43,7 +43,7 @@ release workflow bumps and commits nothing.
    the last commit of the work. The reviewer checks that the bump is there and right.
 3. Merge `sandbox` into `develop` as a fast-forward so the history stays linear, push, and
    wait for `develop`'s **Test & Build** run to pass.
-4. Run `just deploy`: it starts `.github/workflows/release.yml` on `develop` and follows
+4. Run `just release`: it starts `.github/workflows/release.yml` on `develop` and follows
    the run, so a refusal by the workflow's guard shows in your terminal.
 
 The workflow checks that the commit is green, that `Cargo.toml`'s version is above the
@@ -57,14 +57,14 @@ fast-forwards `main` to it, and publishes the crate through crates.io
 `Test & Build` already runs, on every push, what the release will do before anything is
 published: the build, a run of the binary (`--version` must report the crate's version),
 the RPM and DEB (checked for version and installed binary), and `cargo package` plus
-`cargo publish --dry-run`. A problem there fails `develop` before you run `just deploy`,
+`cargo publish --dry-run`. A problem there fails `develop` before you run `just release`,
 so the release does not normally fail on content.
 
 If a release job still fails, what to do depends on when:
 
 - **Before the `GitHub release` job succeeds:** nothing is published and no tag exists.
   Fix the cause and use "Re-run failed jobs" (or fix the code, merge to `develop` and run
-  `just deploy` again). A draft release left by a failed run is replaced.
+  `just release` again). A draft release left by a failed run is replaced.
 - **After it (the tag exists, so `main` or crates.io failed):** the release and tag are
   immutable and cannot be moved or deleted. A transient failure is fixed by "Re-run failed
   jobs": the `main` job fast-forwards `main`, and the crates.io job skips a version it

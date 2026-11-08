@@ -60,7 +60,7 @@ version:
     @cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version'
 
 # Release develop: start the release workflow and follow it (the workflow checks the commit, the bump and CI)
-deploy:
+release:
     gh workflow run release.yml --ref develop
     sleep 5
     gh run watch "$(gh run list --workflow release.yml --branch develop --limit 1 --json databaseId --jq '.[0].databaseId')" --exit-status
