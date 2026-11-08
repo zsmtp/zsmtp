@@ -41,18 +41,22 @@ release workflow bumps and commits nothing.
 2. The operator bumps the version (patch, minor or major) in `Cargo.toml` and `Cargo.lock`
    with a tool of their choice, such as `cargo set-version --bump patch` or `gbump`, as
    the last commit of the work. The reviewer checks that the bump is there and right.
-3. Merge `sandbox` into `develop` as a fast-forward so the history stays linear, push, and
-   wait for `develop`'s **Test & Build** run to pass.
-4. Run `just release`: it starts `.github/workflows/release.yml` on `develop` and follows
-   the run, so a refusal by the workflow's guard shows in your terminal.
+3. Merge `sandbox` into `develop` as a fast-forward so the history stays linear, and push.
+   The `CI OK` check that passed on `sandbox` is on the same commit, so the release guard
+   already accepts it.
+4. Run `just release`: it starts `.github/workflows/release.yml` on `develop`, follows
+   the run (a refusal by the workflow's guard shows in your terminal) and then moves `main`.
 
 The workflow checks that the commit is green, that `Cargo.toml`'s version is above the
 latest release and not tagged yet, and that `main` is an ancestor of it. It then builds
 the Linux archives, RPMs and DEBs for x86_64 and aarch64 (musl, static) and the macOS
 archives for x86_64 and Apple Silicon, packages the crate, attests the build
-provenance, publishes the GitHub release (which creates the tag at that commit),
-fast-forwards `main` to it, and publishes the crate through crates.io
+provenance, publishes the GitHub release (which creates the tag at that commit) and
+publishes the crate through crates.io
 [Trusted Publishing](https://crates.io/docs/trusted-publishing) (no stored token).
+`just release` then waits for `develop`'s own Test & Build to finish and fast-forwards
+`main` to the released commit (a protected branch refuses an update while a `CI OK` check
+of that commit is pending).
 
 `Test & Build` already runs, on every push, what the release will do before anything is
 published: the build, a run of the binary (`--version` must report the crate's version),
@@ -65,10 +69,11 @@ If a release job still fails, what to do depends on when:
 - **Before the `GitHub release` job succeeds:** nothing is published and no tag exists.
   Fix the cause and use "Re-run failed jobs" (or fix the code, merge to `develop` and run
   `just release` again). A draft release left by a failed run is replaced.
-- **After it (the tag exists, so `main` or crates.io failed):** the release and tag are
-  immutable and cannot be moved or deleted. A transient failure is fixed by "Re-run failed
-  jobs": the `main` job fast-forwards `main`, and the crates.io job skips a version it
-  already has. If the fix needs a code change, bump to the next version and release that.
+- **After it (the tag exists, so crates.io or the `main` push failed):** the release and
+  tag are immutable and cannot be moved or deleted. A transient failure is fixed by "Re-run
+  failed jobs" (the crates.io job skips a version it already has); if `just release`
+  stopped before moving `main`, run `git push origin <released-sha>:main`. If the fix needs
+  a code change, bump to the next version and release that.
 
 To verify a download:
 
