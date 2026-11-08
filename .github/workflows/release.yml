@@ -115,6 +115,14 @@ jobs:
         with:
           persist-credentials: false
 
+      # TEMPORARY release-flow test hook; removed right after the test.
+      - name: Test hook (build)
+        if: contains(vars.RELEASE_TEST_FAIL, 'build')
+        shell: bash
+        run: |
+          echo "::error::Injected failure for the release-flow test."
+          exit 1
+
       - name: Build
         id: build
         uses: ./.github/actions/build-binary
@@ -329,6 +337,13 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
+
+      # TEMPORARY release-flow test hook; removed right after the test.
+      - name: Test hook (publish)
+        if: contains(vars.RELEASE_TEST_FAIL, 'publish')
+        run: |
+          echo "::error::Injected failure for the release-flow test."
+          exit 1
 
       - name: Install Rust
         uses: ./.github/actions/rust-toolchain
