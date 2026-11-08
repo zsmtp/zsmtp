@@ -59,9 +59,9 @@ clean:
 version:
     @cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version'
 
-# Release develop: start the release workflow, follow it, then fast-forward main. `main` is
-# moved here, after the run, because a protected branch refuses an update while a `CI OK`
-# check of the same commit is still pending (develop's own Test & Build).
+# `main` is moved here, after the run, because a protected branch refuses an update while a
+# `CI OK` check of the same commit is still pending (develop's own Test & Build).
+# Release develop: start the release workflow, follow it, then fast-forward main
 release:
     #!/usr/bin/env bash
     set -euo pipefail
