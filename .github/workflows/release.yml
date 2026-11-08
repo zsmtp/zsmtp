@@ -70,18 +70,20 @@ jobs:
             echo "::error::main has commits that develop does not; merge main into develop first."
             exit 1
           fi
-          passed="$(gh run list --repo "${GITHUB_REPOSITORY}" --workflow build.yml \
-            --commit "${GITHUB_SHA}" --event push --status success --limit 1 \
-            --json databaseId --jq '.[0].databaseId // empty')"
-          if [[ -z "${passed}" ]]; then
-            echo "::error::${GITHUB_SHA} has no successful Test & Build run."
+          # `CI OK` is Test & Build's aggregate of every gating job; it must have
+          # succeeded on exactly this commit (a non-gating job, such as coverage, failing
+          # does not block the release).
+          passed="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/check-runs?check_name=CI%20OK&status=completed" \
+            --jq '[.check_runs[] | select(.conclusion == "success")] | length')"
+          if [[ "${passed}" -lt 1 ]]; then
+            echo "::error::${GITHUB_SHA} has no successful CI OK check; wait for Test & Build to pass on develop."
             exit 1
           fi
           {
             echo "version=${version}"
             echo "package=${package}"
           } >> "$GITHUB_OUTPUT"
-          echo "Releasing ${package} ${version} from ${GITHUB_SHA} (Test & Build run ${passed})."
+          echo "Releasing ${package} ${version} from ${GITHUB_SHA} (CI OK passed)."
 
   build:
     name: Build and package (${{ matrix.target }})
